@@ -3,7 +3,7 @@
 A full-stack visitor management system built for the New Era University Library.
 
 ## 🚀 Live Application
-**Link:** [PASTE_YOUR_VERCEL_URL_HERE]
+**Link:** [https://neu-library-log-two.vercel.app]
 
 ## ✨ Features
 - **Secure Authentication:** Google OAuth integration (Restricted to NEU users).
