@@ -1,163 +1,143 @@
-'use client';
+"use client";
+import { useEffect, useState } from "react";
+import { createClient } from "@supabase/supabase-js";
 
-import { useEffect, useState } from 'react';
-import { createClient } from '../utils/supabase/client';
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+);
 
-export default function Home() {
+export default function LibraryLogSystem() {
   const [user, setUser] = useState<any>(null);
-  const [profile, setProfile] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
-  const [purpose, setPurpose] = useState('');
-  const [college, setCollege] = useState('');
-  const [isEmployee, setIsEmployee] = useState(false);
-  const [stats, setStats] = useState<any[]>([]);
-  const [filter, setFilter] = useState({ reason: '', college: '', type: 'all' });
-  
-  const supabase = createClient();
+  const [college, setCollege] = useState("");
+  const [reason, setReason] = useState("");
+  const [logs, setLogs] = useState<any[]>([]);
 
   useEffect(() => {
-    async function getData() {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
-        setUser(user);
-        const { data: prof } = await supabase.from('profiles').select('*').eq('id', user.id).single();
-        setProfile(prof);
-        if (prof?.role === 'admin') fetchStats();
-      }
-      setLoading(false);
-    }
-    getData();
+    const getSession = async () => {
+      const { data } = await supabase.auth.getSession();
+      setUser(data.session?.user || null);
+      if (data.session?.user) fetchLogs();
+    };
+    getSession();
   }, []);
 
-  const fetchStats = async () => {
-    let query = supabase.from('visits').select('*, profiles(full_name)');
-    if (filter.reason) query = query.ilike('purpose', `%${filter.reason}%`);
-    if (filter.college) query = query.eq('college', filter.college);
-    if (filter.type === 'employee') query = query.eq('is_employee', true);
-    if (filter.type === 'student') query = query.eq('is_employee', false);
-
-    const { data } = await query.order('check_in_time', { ascending: false });
-    setStats(data || []);
+  const fetchLogs = async () => {
+    const { data } = await supabase.from("visitor_logs").select("*").order("created_at", { ascending: false });
+    if (data) setLogs(data);
   };
 
-  const logVisit = async (e: React.FormEvent) => {
+  const handleCheckIn = async (e: React.FormEvent) => {
     e.preventDefault();
-    const { error } = await supabase.from('visits').insert([
-      { user_id: user.id, purpose, college, is_employee: isEmployee }
+    if (!college) return alert("Please select a college");
+    
+    const { error } = await supabase.from("visitor_logs").insert([
+      { 
+        full_name: user.user_metadata.full_name, 
+        email: user.email, 
+        college, 
+        reason 
+      }
     ]);
-    if (!error) {
-      alert('Visit logged!');
-      setPurpose('');
-      if (profile?.role === 'admin') fetchStats();
+    
+    if (!error) { 
+      alert("Check-in Recorded!"); 
+      setCollege("");
+      setReason("");
+      fetchLogs(); 
     }
   };
 
-  if (loading) return <div className="p-10 text-center text-blue-900 font-bold">Verifying NEU Credentials...</div>;
+  const login = () => supabase.auth.signInWithOAuth({ 
+    provider: "google", 
+    options: { redirectTo: window.location.origin } 
+  });
+
+  if (!user) return (
+    <div className="flex items-center justify-center min-h-screen bg-gray-100 font-sans">
+      <div className="bg-white p-10 rounded-xl shadow-2xl text-center border-t-4 border-blue-600">
+        <h2 className="text-2xl font-bold mb-6">NEU Library Log</h2>
+        <button onClick={login} className="bg-blue-600 text-white px-6 py-3 rounded-lg font-bold hover:bg-blue-700 transition">
+          Login with NEU Google Account
+        </button>
+      </div>
+    </div>
+  );
+
+  const isAdmin = ["neocarl.opriasa@neu.edu.ph", "jcesperanza@neu.edu.ph"].includes(user?.email);
 
   return (
-    <main className="min-h-screen bg-gray-50 p-4 md:p-10">
-      <div className="max-w-6xl mx-auto">
-        <header className="flex justify-between items-center mb-8 bg-white p-6 rounded-2xl shadow-sm border border-blue-100">
-          <div>
-            <h1 className="text-2xl font-black text-blue-900">NEU LIBRARY VISITOR LOG</h1>
-            {user && <p className="text-green-600 font-bold">Welcome to NEU Library!</p>}
-          </div>
-          {user && (
-            <button onClick={() => supabase.auth.signOut().then(() => window.location.reload())} className="text-red-500 text-sm font-bold border border-red-200 px-4 py-2 rounded-lg hover:bg-red-50">Sign Out</button>
-          )}
-        </header>
-
-        {!user ? (
-          <div className="text-center bg-white p-20 rounded-3xl shadow-xl">
-             <button onClick={() => supabase.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: window.location.origin } })} className="bg-blue-600 text-white px-10 py-4 rounded-2xl font-bold text-lg shadow-blue-200 shadow-lg hover:bg-blue-700 transition-all">Sign in with Google</button>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            <section className="lg:col-span-1 bg-white p-6 rounded-2xl shadow-sm border border-gray-200 h-fit">
-              <h2 className="text-xl font-bold mb-6 text-gray-800">Log Your Visit</h2>
-              <form onSubmit={logVisit} className="space-y-4">
-                <input required placeholder="Reason for visit" className="w-full p-3 border rounded-xl" value={purpose} onChange={e => setPurpose(e.target.value)} />
-                <select required className="w-full p-3 border rounded-xl bg-white" value={college} onChange={e => setCollege(e.target.value)}>
-                  <option value="">Select College</option>
-                  <option value="CICS">CICS</option>
-                  <option value="CBA">CBA</option>
-                  <option value="CAS">CAS</option>
-                  <option value="COE">Engineering</option>
-                </select>
-                <label className="flex items-center gap-2 p-2 cursor-pointer">
-                  <input type="checkbox" checked={isEmployee} onChange={e => setIsEmployee(e.target.checked)} />
-                  <span className="text-sm text-gray-600">I am a Faculty / Staff member</span>
-                </label>
-                <button type="submit" className="w-full bg-blue-900 text-white py-4 rounded-xl font-bold hover:bg-blue-800">Submit Log</button>
-              </form>
-            </section>
-
-            {profile?.role === 'admin' ? (
-              <section className="lg:col-span-2 space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <div className="bg-blue-600 p-6 rounded-2xl text-white shadow-lg shadow-blue-100">
-                    <p className="text-sm opacity-80 uppercase font-bold">Total Visitors</p>
-                    <p className="text-4xl font-black">{stats.length}</p>
-                  </div>
-                  <div className="bg-white p-6 rounded-2xl border border-gray-200">
-                    <p className="text-sm text-gray-400 uppercase font-bold">Employees</p>
-                    <p className="text-4xl font-black text-gray-800">{stats.filter(s => s.is_employee).length}</p>
-                  </div>
-                  <div className="bg-white p-6 rounded-2xl border border-gray-200">
-                    <p className="text-sm text-gray-400 uppercase font-bold">Students</p>
-                    <p className="text-4xl font-black text-gray-800">{stats.filter(s => !s.is_employee).length}</p>
-                  </div>
-                </div>
-
-                <div className="bg-white p-6 rounded-2xl border border-gray-200">
-                  <h3 className="font-bold mb-4">Filters</h3>
-                  <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
-                    <input placeholder="Search Reason" className="p-2 border rounded-lg text-sm" onChange={e => setFilter({...filter, reason: e.target.value})} />
-                    <select className="p-2 border rounded-lg text-sm bg-white" onChange={e => setFilter({...filter, college: e.target.value})}>
-                      <option value="">All Colleges</option>
-                      <option value="CICS">CICS</option>
-                      <option value="CBA">CBA</option>
-                    </select>
-                    <select className="p-2 border rounded-lg text-sm bg-white" onChange={e => setFilter({...filter, type: e.target.value})}>
-                      <option value="all">Everyone</option>
-                      <option value="employee">Employees Only</option>
-                      <option value="student">Students Only</option>
-                    </select>
-                    <button onClick={fetchStats} className="bg-gray-800 text-white rounded-lg text-sm font-bold">Apply Filters</button>
-                  </div>
-                </div>
-
-                <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
-                   <table className="w-full text-left">
-                     <thead className="bg-gray-50 text-gray-500 text-xs uppercase font-bold">
-                       <tr>
-                         <th className="p-4">Visitor</th>
-                         <th className="p-4">College</th>
-                         <th className="p-4">Reason</th>
-                         <th className="p-4">Type</th>
-                       </tr>
-                     </thead>
-                     <tbody className="divide-y">
-                       {stats.map(s => (
-                         <tr key={s.id} className="text-sm hover:bg-gray-50">
-                           <td className="p-4 font-bold">{s.profiles?.full_name}</td>
-                           <td className="p-4">{s.college}</td>
-                           <td className="p-4 text-gray-600">{s.purpose}</td>
-                           <td className="p-4"><span className={`px-2 py-1 rounded text-xs ${s.is_employee ? 'bg-purple-100 text-purple-700' : 'bg-green-100 text-green-700'}`}>{s.is_employee ? 'Staff' : 'Student'}</span></td>
-                         </tr>
-                       ))}
-                     </tbody>
-                   </table>
-                </div>
-              </section>
-            ) : (
-              <div className="lg:col-span-2 bg-white p-10 rounded-2xl border border-gray-200 flex items-center justify-center">
-                <p className="text-gray-400 italic text-center">Visitor history is only visible to NEU Library Admin.</p>
-              </div>
-            )}
-          </div>
-        )}
+    <div className="p-8 max-w-5xl mx-auto font-sans min-h-screen bg-gray-50">
+      <div className="bg-blue-700 text-white p-6 rounded-t-xl flex justify-between items-center shadow-lg">
+        <div>
+          <h1 className="text-2xl font-bold italic">NEU Library</h1>
+          <p className="text-xs opacity-80 uppercase tracking-widest">Visitor Management System</p>
+        </div>
+        <div className="text-right">
+          <p className="font-medium">{user.user_metadata.full_name}</p>
+          {isAdmin && <span className="bg-yellow-400 text-blue-900 px-2 py-0.5 rounded text-[10px] font-black uppercase shadow-sm">Admin Access</span>}
+        </div>
       </div>
-    </main>
+
+      <div className="bg-white border-x border-b p-8 shadow-md rounded-b-xl mb-8">
+        <h2 className="text-xl font-bold mb-6 text-gray-800">Registration</h2>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <select value={college} onChange={(e) => setCollege(e.target.value)} className="border-2 p-3 rounded-lg focus:border-blue-500 outline-none transition">
+            <option value="">Select College/Unit</option>
+            <option value="CCS">College of Computer Studies</option>
+            <option value="COE">College of Engineering</option>
+            <option value="COA">College of Accountancy</option>
+            <option value="CAS">College of Arts and Sciences</option>
+            <option value="CED">College of Education</option>
+          </select>
+          <input 
+            placeholder="Purpose (e.g., Study, Research)" 
+            value={reason} 
+            onChange={(e) => setReason(e.target.value)} 
+            className="border-2 p-3 rounded-lg focus:border-blue-500 outline-none transition" 
+          />
+          <button onClick={handleCheckIn} className="bg-green-600 hover:bg-green-700 text-white p-3 rounded-lg font-bold shadow-md transition transform active:scale-95">
+            Check In Now
+          </button>
+        </div>
+      </div>
+
+      {isAdmin ? (
+        <div className="animate-in fade-in slide-in-from-bottom-4 duration-700">
+          <div className="flex justify-between items-end mb-4 px-2">
+            <h3 className="text-lg font-bold text-gray-700">Real-time Visitor Logs</h3>
+            <span className="text-sm bg-gray-200 px-3 py-1 rounded-full text-gray-600 font-medium">Total: {logs.length}</span>
+          </div>
+          <div className="bg-white border rounded-xl overflow-hidden shadow-2xl">
+            <table className="w-full text-left">
+              <thead className="bg-gray-800 text-white text-sm">
+                <tr>
+                  <th className="p-4">Student Name</th>
+                  <th className="p-4">College</th>
+                  <th className="p-4">Purpose</th>
+                  <th className="p-4 text-right">Time In</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {logs.map((log) => (
+                  <tr key={log.id} className="hover:bg-blue-50 transition">
+                    <td className="p-4 font-semibold text-gray-800">{log.full_name}</td>
+                    <td className="p-4"><span className="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded font-bold">{log.college}</span></td>
+                    <td className="p-4 text-gray-600 italic">{log.reason || "General Study"}</td>
+                    <td className="p-4 text-right text-gray-500 text-sm font-mono">
+                      {new Date(log.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      ) : (
+        <div className="text-center py-12 bg-white rounded-xl border-2 border-dashed border-gray-200">
+          <p className="text-gray-400 font-medium italic">Login with an Admin account to view student records.</p>
+        </div>
+      )}
+    </div>
   );
 }
