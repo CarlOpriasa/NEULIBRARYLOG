@@ -94,7 +94,12 @@ export default function LibraryLogSystem() {
     new Date(log.created_at).toDateString() === new Date().toDateString()
   ).length;
 
-  if (user && user.email === "admin@neu.edu") {
+  const isAdmin = user && (
+    user.email === "neocarl.opriasa@neu.edu.ph" || 
+    user.email === "jcesperanza@neu.edu.ph"
+  );
+
+  if (isAdmin) {
     return (
       <div className="min-h-screen bg-gray-50 p-4 md:p-8 text-black font-sans">
         <div className="max-w-6xl mx-auto space-y-6">
@@ -102,7 +107,7 @@ export default function LibraryLogSystem() {
             <div>
               <h1 className="text-2xl font-bold text-gray-800 tracking-tight">NEU Library Admin</h1>
               <p className="text-gray-500 text-sm flex items-center gap-1 mt-1">
-                <ShieldCheck size={16} className="text-green-500" /> Currently Active: {user.email}
+                <ShieldCheck size={16} className="text-green-500" /> Admin Access: {user.email}
               </p>
             </div>
             <button 
